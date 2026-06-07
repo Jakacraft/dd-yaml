@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dungeon Dodge — Item Editor</title>
+  <title>Dungeon Dodge — Item Creator</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
@@ -28,12 +28,12 @@
 
     const RARITIES = ["common","uncommon","rare","epic","legendary","mythic","heroic"];
     const ITEM_TYPES = ["sword","bow","wand","helmet","chestplate","leggings","boots","pet","accessory","potion","utility","material","item_skin"];
-    const EXECUTE_TYPES = ["right-click","left-click","shift-right-click","shift-left-click","sneak","attack","defense","periodic","stat-bonus","stat-operate","passive"];
+    const EXECUTE_TYPES = ["right-click","left-click","shift-right-click","shift-left-click","sneak","periodic","stat-bonus","stat-operate","passive"];
     const RARITY_COLORS = {
-      common: "#00ee00", uncommon: "#55ff55", rare: "#5555ff",
+      common: "#d4d9d4", uncommon: "#55ff55", rare: "#5555ff",
       epic: "#aa00aa", legendary: "#ffaa00", mythic: "#ff5555", heroic: "#ff55ff"
     };
-    const STAT_OPTIONS = ["damage","speed","health","mana","defense","crit-chance","crit-damage","intelligence","strength","ferocity","magic-find","mining-fortune","farming-fortune","foraging-fortune"];
+    const STAT_OPTIONS = ["damage","speed","health","mana","defense","crit-chance","crit-damage","strength""luck"];
 
     function genId() { return Math.random().toString(36).slice(2, 8); }
 
