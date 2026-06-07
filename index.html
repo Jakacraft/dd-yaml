@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dungeon Dodge — Item Editor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root { height: 100%; }
+    body { background: #07070e; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0d0d14; }
+    ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+    select option { background: #0d0d14; }
+    input:focus, select:focus { border-color: #c8a84b !important; box-shadow: 0 0 0 2px #c8a84b22; outline: none; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useCallback } = React;
+
+    const RARITIES = ["common","uncommon","rare","epic","legendary","mythic","heroic"];
+    const ITEM_TYPES = ["sword","bow","wand","helmet","chestplate","leggings","boots","pet","accessory","potion","utility","material","item_skin"];
+    const EXECUTE_TYPES = ["right-click","left-click","shift-right-click","shift-left-click","sneak","attack","defense","periodic","stat-bonus","stat-operate","passive"];
+    const RARITY_COLORS = {
+      common: "#00ee00", uncommon: "#55ff55", rare: "#5555ff",
+      epic: "#aa00aa", legendary: "#ffaa00", mythic: "#ff5555", heroic: "#ff55ff"
+    };
+    const STAT_OPTIONS = ["damage","speed","health","mana","defense","crit-chance","crit-damage","intelligence","strength","ferocity","magic-find","mining-fortune","farming-fortune","foraging-fortune"];
+
+    function genId() { return Math.random().toString(36).slice(2, 8); }
+
+    const defaultAbility = () => ({
+      id: genId(), key: "newAbility", name: "", executes: "right-click",
+      description: [""], fullSetBonus: false, manaCost: "", cooldown: "",
+      stats: [], operatedStats: [], requiredRarity: ""
+    });
+
+    const defaultItem = () => ({
+      id: genId(), itemId: "new_item", type: "sword", rarity: "common",
+      item: "iron_sword", name: "New Item", sellPrice: 0, lore: [],
+      shiny: false, skullTexture: "", dyeColor: "", armorTrim: "", itemSet: "",
+      stats: [], levelReqs: [{ type: "dungeon", value: 1 }], abilities: [],
+      petExpType: "", petDungeonType: "", canBeUpgraded: true,
+    });
+
+    function buildYaml(item) {
+      const lines = [];
+      const indent = (n) => "  ".repeat(n);
+      lines.push(`${item.itemId}:`);
+      lines.push(`${indent(1)}type: ${item.type}`);
+      if (item.type !== "pet") lines.push(`${indent(1)}rarity: ${item.rarity}`);
+      lines.push(`${indent(1)}item: ${item.item}`);
+      if (item.skullTexture) lines.push(`${indent(1)}skull-texture: ${item.skullTexture}`);
+      lines.push(`${indent(1)}display-name: "${item.name}"`);
+      lines.push(`${indent(1)}sell-price: ${item.sellPrice}`);
+      if (item.shiny) lines.push(`${indent(1)}shiny: true`);
+      if (item.dyeColor) lines.push(`${indent(1)}dye-color: ${item.dyeColor}`);
+      if (item.armorTrim) lines.push(`${indent(1)}armor-trim: ${item.armorTrim}`);
+      if (item.lore.length > 0) {
+        lines.push(`${indent(1)}lore:`);
+        item.lore.forEach(l => lines.push(`${indent(2)}- "${l}"`));
+      }
+      if (item.stats.length > 0) {
+        lines.push(`${indent(1)}item-stats:`);
+        item.stats.forEach(s => lines.push(`${indent(2)}${s.key}: ${s.value}`));
+      }
+      if (item.itemSet) lines.push(`${indent(1)}item-set: ${item.itemSet}`);
+      if (item.levelReqs.length > 0) {
+        lines.push(`${indent(1)}level-req:`);
+        item.levelReqs.forEach(r => lines.push(`${indent(2)}${r.type}: ${r.value}`));
+      }
+      if (item.type === "pet") {
+        if (item.petExpType) lines.push(`${indent(1)}pet-exp-type: ${item.petExpType}`);
+        if (item.petDungeonType) lines.push(`${indent(1)}pet-dungeon-type: ${item.petDungeonType}`);
+        lines.push(`${indent(1)}can-be-upgraded: ${item.canBeUpgraded}`);
+      }
+      if (item.abilities.length > 0) {
+        lines.push(`${indent(1)}abilities:`);
+        item.abilities.forEach(ab => {
+          lines.push(`${indent(2)}${ab.key}:`);
+          lines.push(`${indent(3)}executes: ${ab.executes}`);
+          lines.push(`${indent(3)}name: "${ab.name}"`);
+          if (ab.description.filter(Boolean).length > 0) {
+            lines.push(`${indent(3)}description:`);
+            ab.description.filter(Boolean).forEach(d => lines.push(`${indent(4)}- "${d}"`));
+          }
+          if (ab.fullSetBonus) lines.push(`${indent(3)}full-set-bonus: true`);
+          if (ab.manaCost !== "") lines.push(`${indent(3)}mana-cost: ${ab.manaCost}`);
+          if (ab.cooldown !== "") lines.push(`${indent(3)}cooldown: ${ab.cooldown}`);
+          if (ab.requiredRarity) lines.push(`${indent(3)}required-rarity: ${ab.requiredRarity}`);
+          if (ab.executes === "stat-bonus" && ab.stats.length > 0) {
+            lines.push(`${indent(3)}stats:`);
+            ab.stats.forEach(s => lines.push(`${indent(4)}${s.key}: ${s.value}`));
+          }
+          if (ab.executes === "stat-operate" && ab.operatedStats.length > 0) {
+            lines.push(`${indent(3)}operated-stats:`);
+            ab.operatedStats.forEach(s => lines.push(`${indent(4)}- ${s}`));
+          }
+        });
+      }
+      return lines.join("\n");
+    }
+
+    // ── Shared styles ─────────────────────────────────────────────────────────
+    const inp = {
+      background: "#0d0d14", border: "1px solid #2a2a3a", borderRadius: 6,
+      color: "#e8dfc8", padding: "6px 10px", fontFamily: "monospace", fontSize: 13,
+      width: "100%", boxSizing: "border-box", outline: "none"
+    };
+    const selStyle = { ...inp, cursor: "pointer" };
+
+    // ── Sub-components ────────────────────────────────────────────────────────
+    function Tag({ color, children }) {
+      return (
+        <span style={{
+          background: color + "22", color, border: `1px solid ${color}55`,
+          borderRadius: 4, padding: "1px 8px", fontSize: 11,
+          fontFamily: "monospace", fontWeight: 700, letterSpacing: 1
+        }}>{children}</span>
+      );
+    }
+
+    function Field({ label, children, hint }) {
+      return (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+            <label style={{ color: "#b8a07a", fontSize: 11, fontFamily: "monospace", letterSpacing: 1, textTransform: "uppercase" }}>{label}</label>
+            {hint && <span style={{ color: "#4a4a5a", fontSize: 10 }}>{hint}</span>}
+          </div>
+          {children}
+        </div>
+      );
+    }
+
+    function TextInput({ value, onChange, placeholder }) {
+      return <input style={inp} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder || ""} />;
+    }
+
+    function SelectInput({ value, onChange, options }) {
+      return (
+        <select style={selStyle} value={value} onChange={e => onChange(e.target.value)}>
+          {options.map(o => <option key={o.value ?? o} value={o.value ?? o}>{o.label ?? o}</option>)}
+        </select>
+      );
+    }
+
+    function Checkbox({ value, onChange, label }) {
+      return (
+        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", color: "#b8a07a", fontSize: 12, fontFamily: "monospace" }}>
+          <span style={{
+            display: "inline-block", width: 16, height: 16, borderRadius: 4,
+            background: value ? "#c8a84b" : "#0d0d14",
+            border: `1px solid ${value ? "#c8a84b" : "#2a2a3a"}`,
+            transition: "all 0.15s", flexShrink: 0
+          }} onClick={() => onChange(!value)} />
+          {label}
+        </label>
+      );
+    }
+
+    function AddButton({ onClick, children }) {
+      const [hov, setHov] = useState(false);
+      return (
+        <button onClick={onClick}
+          onMouseEnter={() => setHov(true)}
+          onMouseLeave={() => setHov(false)}
+          style={{
+            background: "none", border: `1px dashed ${hov ? "#c8a84b" : "#3a3a4a"}`,
+            color: hov ? "#c8a84b" : "#6a6a8a", borderRadius: 6,
+            padding: "5px 12px", fontSize: 11, fontFamily: "monospace",
+            cursor: "pointer", letterSpacing: 1, transition: "all 0.15s"
+          }}>+ {children}</button>
+      );
+    }
+
+    function RemoveButton({ onClick }) {
+      const [hov, setHov] = useState(false);
+      return (
+        <button onClick={onClick}
+          onMouseEnter={() => setHov(true)}
+          onMouseLeave={() => setHov(false)}
+          style={{
+            background: "none", border: "none",
+            color: hov ? "#ff5555" : "#6a3a3a",
+            cursor: "pointer", fontSize: 15, lineHeight: 1,
+            padding: "0 4px", transition: "color 0.1s", flexShrink: 0
+          }}>✕</button>
+      );
+    }
+
+    function KVList({ items, onChange, keyPlaceholder = "stat", valuePlaceholder = "value", keyOptions }) {
+      const update = (i, field, val) => { const n = [...items]; n[i] = { ...n[i], [field]: val }; onChange(n); };
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {items.map((item, i) => (
+            <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              {keyOptions
+                ? <select style={{ ...selStyle, flex: 1 }} value={item.key} onChange={e => update(i, "key", e.target.value)}>
+                    {keyOptions.map(k => <option key={k} value={k}>{k}</option>)}
+                  </select>
+                : <input style={{ ...inp, flex: 1 }} value={item.key} onChange={e => update(i, "key", e.target.value)} placeholder={keyPlaceholder} />
+              }
+              <span style={{ color: "#4a4a5a", fontFamily: "monospace" }}>:</span>
+              <input style={{ ...inp, flex: "0 0 80px" }} value={item.value} onChange={e => update(i, "value", e.target.value)} placeholder={valuePlaceholder} />
+              <RemoveButton onClick={() => onChange(items.filter((_, j) => j !== i))} />
+            </div>
+          ))}
+          <AddButton onClick={() => onChange([...items, { key: keyOptions ? keyOptions[0] : "", value: "" }])}>Add</AddButton>
+        </div>
+      );
+    }
+
+    function AbilityEditor({ ability, onChange, onRemove, isPet }) {
+      const [open, setOpen] = useState(true);
+      const up = (field, val) => onChange({ ...ability, [field]: val });
+      return (
+        <div style={{ border: "1px solid #2a2a3a", borderRadius: 8, marginBottom: 8, background: "#090910" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", cursor: "pointer", userSelect: "none" }}
+            onClick={() => setOpen(o => !o)}>
+            <span style={{ color: "#4a4a5a", fontSize: 12 }}>{open ? "▾" : "▸"}</span>
+            <span style={{ color: "#c8a84b", fontFamily: "monospace", fontSize: 13, fontWeight: 700 }}>{ability.key || "ability"}</span>
+            <Tag color="#5588aa">{ability.executes}</Tag>
+            {ability.name && <span style={{ color: "#888", fontSize: 12 }}>{ability.name}</span>}
+            <div style={{ marginLeft: "auto" }}><RemoveButton onClick={e => { e.stopPropagation(); onRemove(); }} /></div>
+          </div>
+          {open && (
+            <div style={{ padding: "0 12px 12px", borderTop: "1px solid #1a1a24" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+                <Field label="Key (yaml name)">
+                  <TextInput value={ability.key} onChange={v => up("key", v)} placeholder="abilityKey" />
+                </Field>
+                <Field label="Display Name">
+                  <TextInput value={ability.name} onChange={v => up("name", v)} placeholder="Ability Name" />
+                </Field>
+              </div>
+              <Field label="Executes">
+                <SelectInput value={ability.executes} onChange={v => up("executes", v)} options={EXECUTE_TYPES} />
+              </Field>
+              <Field label="Description Lines">
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {ability.description.map((d, i) => (
+                    <div key={i} style={{ display: "flex", gap: 6 }}>
+                      <input style={{ ...inp, flex: 1 }} value={d} onChange={e => {
+                        const n = [...ability.description]; n[i] = e.target.value; up("description", n);
+                      }} placeholder="<gray>Description line" />
+                      <RemoveButton onClick={() => up("description", ability.description.filter((_, j) => j !== i))} />
+                    </div>
+                  ))}
+                  <AddButton onClick={() => up("description", [...ability.description, ""])}>Line</AddButton>
+                </div>
+              </Field>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                <Field label="Mana Cost">
+                  <TextInput value={ability.manaCost} onChange={v => up("manaCost", v)} placeholder="5" />
+                </Field>
+                <Field label="Cooldown (s)">
+                  <TextInput value={ability.cooldown} onChange={v => up("cooldown", v)} placeholder="10" />
+                </Field>
+                {isPet && (
+                  <Field label="Required Rarity">
+                    <SelectInput value={ability.requiredRarity} onChange={v => up("requiredRarity", v)}
+                      options={[{ value: "", label: "—" }, ...RARITIES.map(r => ({ value: r, label: r }))]} />
+                  </Field>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 12, marginBottom: 10 }}>
+                <Checkbox value={ability.fullSetBonus} onChange={v => up("fullSetBonus", v)} label="Full Set Bonus" />
+              </div>
+              {ability.executes === "stat-bonus" && (
+                <Field label="Bonus Stats">
+                  <KVList items={ability.stats} onChange={v => up("stats", v)} keyOptions={STAT_OPTIONS} valuePlaceholder="12" />
+                </Field>
+              )}
+              {ability.executes === "stat-operate" && (
+                <Field label="Operated Stats">
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {ability.operatedStats.map((s, i) => (
+                      <div key={i} style={{ display: "flex", gap: 6 }}>
+                        <select style={{ ...selStyle, flex: 1 }} value={s} onChange={e => {
+                          const n = [...ability.operatedStats]; n[i] = e.target.value; up("operatedStats", n);
+                        }}>
+                          {STAT_OPTIONS.map(k => <option key={k} value={k}>{k}</option>)}
+                        </select>
+                        <RemoveButton onClick={() => up("operatedStats", ability.operatedStats.filter((_, j) => j !== i))} />
+                      </div>
+                    ))}
+                    <AddButton onClick={() => up("operatedStats", [...ability.operatedStats, STAT_OPTIONS[0]])}>Stat</AddButton>
+                  </div>
+                </Field>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function ItemEditor({ item, onChange, onRemove }) {
+      const up = (field, val) => onChange({ ...item, [field]: val });
+      const rarityColor = RARITY_COLORS[item.rarity] || "#888";
+      const isPet = item.type === "pet";
+      const isArmor = ["helmet","chestplate","leggings","boots"].includes(item.type);
+      const isLeather = item.item?.toLowerCase().includes("leather");
+      const isHead = item.item?.toLowerCase().includes("head") || item.item?.toLowerCase().startsWith("hdb");
+
+      return (
+        <div style={{ border: `1px solid ${rarityColor}44`, borderRadius: 10, marginBottom: 16, overflow: "hidden" }}>
+          <div style={{ background: `linear-gradient(90deg, ${rarityColor}18, transparent)`, borderBottom: `1px solid ${rarityColor}33`, padding: "10px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontFamily: "'Cinzel', serif", fontSize: 15, color: rarityColor, fontWeight: 700 }}>{item.name || "Unnamed Item"}</span>
+            <Tag color={rarityColor}>{item.rarity || "common"}</Tag>
+            <Tag color="#5588aa">{item.type}</Tag>
+            <code style={{ color: "#4a5a6a", fontSize: 11, marginLeft: 4 }}>{item.itemId}</code>
+            <div style={{ marginLeft: "auto" }}><RemoveButton onClick={onRemove} /></div>
+          </div>
+          <div style={{ padding: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 4 }}>
+              <Field label="Item ID (yaml key)">
+                <TextInput value={item.itemId} onChange={v => up("itemId", v)} placeholder="my_item" />
+              </Field>
+              <Field label="Display Name">
+                <TextInput value={item.name} onChange={v => up("name", v)} placeholder="My Item" />
+              </Field>
+              <Field label="Vanilla Material">
+                <TextInput value={item.item} onChange={v => up("item", v)} placeholder="iron_sword / hdb:12345" />
+              </Field>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 4 }}>
+              <Field label="Item Type">
+                <SelectInput value={item.type} onChange={v => up("type", v)} options={ITEM_TYPES} />
+              </Field>
+              {!isPet && (
+                <Field label="Rarity">
+                  <SelectInput value={item.rarity} onChange={v => up("rarity", v)} options={RARITIES} />
+                </Field>
+              )}
+              <Field label="Sell Price">
+                <TextInput value={item.sellPrice} onChange={v => up("sellPrice", v)} placeholder="0" />
+              </Field>
+              <Field label="Item Set">
+                <TextInput value={item.itemSet} onChange={v => up("itemSet", v)} placeholder="set_name" />
+              </Field>
+            </div>
+            <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
+              <Checkbox value={item.shiny} onChange={v => up("shiny", v)} label="Shiny" />
+            </div>
+            {isHead && (
+              <Field label="Skull Texture / HDB ID" hint="Player heads only">
+                <TextInput value={item.skullTexture} onChange={v => up("skullTexture", v)} placeholder="123456 or texture string" />
+              </Field>
+            )}
+            {isLeather && (
+              <Field label="Dye Color (R, G, B)" hint="Leather armor only">
+                <TextInput value={item.dyeColor} onChange={v => up("dyeColor", v)} placeholder="12, 34, 56" />
+              </Field>
+            )}
+            {isArmor && (
+              <Field label="Armor Trim (type;material)" hint="e.g. silence;diamond">
+                <TextInput value={item.armorTrim} onChange={v => up("armorTrim", v)} placeholder="silence;diamond" />
+              </Field>
+            )}
+            <Field label="Lore Lines" hint="MiniMessage format">
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {item.lore.map((l, i) => (
+                  <div key={i} style={{ display: "flex", gap: 6 }}>
+                    <input style={{ ...inp, flex: 1 }} value={l} onChange={e => { const n = [...item.lore]; n[i] = e.target.value; up("lore", n); }} placeholder="<gray>Description line" />
+                    <RemoveButton onClick={() => up("lore", item.lore.filter((_, j) => j !== i))} />
+                  </div>
+                ))}
+                <AddButton onClick={() => up("lore", [...item.lore, ""])}>Lore Line</AddButton>
+              </div>
+            </Field>
+            {!isPet && (
+              <Field label="Item Stats">
+                <KVList items={item.stats} onChange={v => up("stats", v)} keyOptions={STAT_OPTIONS} valuePlaceholder="5" />
+              </Field>
+            )}
+            <Field label="Level Requirements">
+              <KVList items={item.levelReqs} onChange={v => up("levelReqs", v)} keyPlaceholder="dungeon" valuePlaceholder="1" />
+            </Field>
+            {isPet && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                <Field label="Pet Exp Type">
+                  <TextInput value={item.petExpType} onChange={v => up("petExpType", v)} placeholder="dungeon" />
+                </Field>
+                <Field label="Pet Dungeon Type">
+                  <TextInput value={item.petDungeonType} onChange={v => up("petDungeonType", v)} placeholder="castle" />
+                </Field>
+                <Field label="Can Be Upgraded">
+                  <SelectInput value={String(item.canBeUpgraded)} onChange={v => up("canBeUpgraded", v === "true")}
+                    options={[{ value: "true", label: "true" }, { value: "false", label: "false" }]} />
+                </Field>
+              </div>
+            )}
+            <div style={{ marginTop: 8 }}>
+              <div style={{ color: "#b8a07a", fontSize: 11, fontFamily: "monospace", letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>Abilities</div>
+              {item.abilities.map((ab, i) => (
+                <AbilityEditor key={ab.id} ability={ab} isPet={isPet}
+                  onChange={v => { const n = [...item.abilities]; n[i] = v; up("abilities", n); }}
+                  onRemove={() => up("abilities", item.abilities.filter((_, j) => j !== i))}
+                />
+              ))}
+              <AddButton onClick={() => up("abilities", [...item.abilities, defaultAbility()])}>Ability</AddButton>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Main App ──────────────────────────────────────────────────────────────
+    function App() {
+      const [items, setItems] = useState([defaultItem()]);
+      const [activeTab, setActiveTab] = useState("editor");
+      const [copied, setCopied] = useState(false);
+
+      const updateItem = useCallback((id, newItem) => {
+        setItems(prev => prev.map(it => it.id === id ? newItem : it));
+      }, []);
+
+      const removeItem = useCallback((id) => {
+        setItems(prev => prev.filter(it => it.id !== id));
+      }, []);
+
+      const yaml = items.map(buildYaml).join("\n\n");
+
+      const copyYaml = () => {
+        navigator.clipboard.writeText(yaml);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      };
+
+      const downloadYaml = () => {
+        const blob = new Blob([yaml], { type: "text/plain" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "items.yml";
+        a.click();
+        URL.revokeObjectURL(a.href);
+      };
+
+      return (
+        <div style={{ minHeight: "100vh", background: "#07070e", color: "#e8dfc8", fontFamily: "'Crimson Text', Georgia, serif" }}>
+          {/* Top bar */}
+          <div style={{
+            background: "linear-gradient(180deg, #0f0f1a 0%, #090910 100%)",
+            borderBottom: "1px solid #1e1e2e", padding: "14px 24px",
+            display: "flex", alignItems: "center", gap: 16
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 22 }}>⚔️</span>
+              <div>
+                <div style={{ fontFamily: "'Cinzel', serif", fontSize: 16, color: "#c8a84b", fontWeight: 700, letterSpacing: 2 }}>DUNGEON DODGE</div>
+                <div style={{ fontSize: 10, color: "#4a4a6a", letterSpacing: 3, fontFamily: "monospace" }}>ITEM EDITOR</div>
+              </div>
+            </div>
+            <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+              {["editor", "yaml"].map(tab => (
+                <button key={tab} onClick={() => setActiveTab(tab)} style={{
+                  background: activeTab === tab ? "#c8a84b" : "none",
+                  color: activeTab === tab ? "#07070e" : "#6a6a8a",
+                  border: `1px solid ${activeTab === tab ? "#c8a84b" : "#2a2a3a"}`,
+                  borderRadius: 6, padding: "6px 16px", fontFamily: "monospace", fontSize: 12,
+                  cursor: "pointer", letterSpacing: 1, textTransform: "uppercase", transition: "all 0.15s"
+                }}>
+                  {tab === "editor" ? "🗡 Editor" : "📜 YAML"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", height: "calc(100vh - 57px)" }}>
+            {/* Sidebar */}
+            <div style={{
+              width: 220, background: "#090910", borderRight: "1px solid #1a1a24",
+              display: "flex", flexDirection: "column", flexShrink: 0
+            }}>
+              <div style={{ padding: "10px 12px", borderBottom: "1px solid #1a1a24", fontSize: 10, color: "#4a4a6a", fontFamily: "monospace", letterSpacing: 2 }}>
+                ITEMS ({items.length})
+              </div>
+              <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
+                {items.map(item => {
+                  const rc = RARITY_COLORS[item.rarity] || "#888";
+                  return (
+                    <div key={item.id} style={{
+                      padding: "7px 10px", borderRadius: 6, marginBottom: 4,
+                      background: "#0d0d14", border: `1px solid ${rc}33`, cursor: "pointer"
+                    }}>
+                      <div style={{ color: rc, fontFamily: "'Cinzel', serif", fontSize: 12, fontWeight: 600 }}>{item.name || "Unnamed"}</div>
+                      <div style={{ color: "#4a4a6a", fontSize: 10, fontFamily: "monospace" }}>{item.itemId}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ padding: 10, borderTop: "1px solid #1a1a24" }}>
+                <NewItemBtn onClick={() => setItems(prev => [...prev, defaultItem()])} />
+              </div>
+            </div>
+
+            {/* Main content */}
+            <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+              {activeTab === "editor" ? (
+                items.length === 0 ? (
+                  <div style={{ textAlign: "center", color: "#3a3a4a", marginTop: 80, fontFamily: "'Cinzel', serif", fontSize: 18 }}>
+                    No items yet.<br />
+                    <span style={{ fontSize: 13, fontFamily: "monospace", color: "#2a2a3a" }}>Click + NEW ITEM to begin.</span>
+                  </div>
+                ) : (
+                  items.map(item => (
+                    <ItemEditor key={item.id} item={item}
+                      onChange={newItem => updateItem(item.id, newItem)}
+                      onRemove={() => removeItem(item.id)}
+                    />
+                  ))
+                )
+              ) : (
+                <div>
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12, gap: 8 }}>
+                    <button onClick={downloadYaml} style={{
+                      background: "#0d0d14", border: "1px solid #2a2a3a", color: "#88aacc",
+                      borderRadius: 6, padding: "7px 18px", fontFamily: "monospace",
+                      cursor: "pointer", fontSize: 12, letterSpacing: 1, transition: "all 0.2s"
+                    }}>⬇ DOWNLOAD .YML</button>
+                    <button onClick={copyYaml} style={{
+                      background: copied ? "#2a4a2a" : "#0d0d14",
+                      border: `1px solid ${copied ? "#55aa55" : "#2a2a3a"}`,
+                      color: copied ? "#55aa55" : "#c8a84b",
+                      borderRadius: 6, padding: "7px 18px", fontFamily: "monospace",
+                      cursor: "pointer", fontSize: 12, letterSpacing: 1, transition: "all 0.2s"
+                    }}>
+                      {copied ? "✓ COPIED" : "⎘ COPY YAML"}
+                    </button>
+                  </div>
+                  <pre style={{
+                    background: "#090910", border: "1px solid #1a1a24", borderRadius: 10,
+                    padding: 20, fontFamily: "'JetBrains Mono', monospace", fontSize: 13,
+                    color: "#c8dca0", lineHeight: 1.7, overflowX: "auto", whiteSpace: "pre", margin: 0
+                  }}>
+                    {yaml || "# No items defined yet"}
+                  </pre>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function NewItemBtn({ onClick }) {
+      const [hov, setHov] = useState(false);
+      return (
+        <button onClick={onClick}
+          onMouseEnter={() => setHov(true)}
+          onMouseLeave={() => setHov(false)}
+          style={{
+            width: "100%", background: "none",
+            border: `1px dashed ${hov ? "#c8a84b" : "#3a3a4a"}`,
+            color: hov ? "#c8a84b" : "#6a6a8a",
+            borderRadius: 6, padding: "8px", fontFamily: "monospace",
+            cursor: "pointer", fontSize: 11, letterSpacing: 1, transition: "all 0.15s"
+          }}>+ NEW ITEM</button>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
