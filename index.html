@@ -34,7 +34,8 @@
       epic: "#aa00aa", legendary: "#ffaa00", mythic: "#ff55ff", heroic: "#AA0000", supreme: "#00AAAA", otherworldly: "#f700ff", special: "#ff5555"
     };
     const STAT_OPTIONS = ["damage","defense","attack_power","swing_range","max_health","max_mana","crit_chance","crit_damage","speed","luck","evasion","fishing_speed","sea_creature_chance","sea_treasure_chance","breaking_power","mining_speed","mining_fortune"];
-
+    const LEVEL_TYPES = ["dungeon","fishing","mining","healer_class","archer_class","warrior_class","tank_class","mage_class","temp"]
+    
     function genId() { return Math.random().toString(36).slice(2, 8); }
 
     const defaultAbility = () => ({
@@ -75,7 +76,7 @@
       if (item.itemSet) lines.push(`${indent(1)}item-set: ${item.itemSet}`);
       if (item.levelReqs.length > 0) {
         lines.push(`${indent(1)}level-req:`);
-        item.levelReqs.forEach(r => lines.push(`${indent(2)}${r.type}: ${r.value}`));
+        item.levelReqs.forEach(r => lines.push(`${indent(2)}${s.key}: ${r.value}`));
       }
       if (item.type === "pet") {
         if (item.petExpType) lines.push(`${indent(1)}pet-exp-type: ${item.petExpType}`);
@@ -382,7 +383,7 @@
               </Field>
             )}
             <Field label="Level Requirements">
-              <KVList items={item.levelReqs} onChange={v => up("levelReqs", v)} keyPlaceholder="dungeon" valuePlaceholder="1" />
+              <KVList items={item.levelReqs} onChange={v => up("levelReqs", v)} keyOptions={LEVEL_TYPES} valuePlaceholder="1" />
             </Field>
             {isPet && (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
