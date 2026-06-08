@@ -76,7 +76,7 @@
       if (item.itemSet) lines.push(`${indent(1)}item-set: ${item.itemSet}`);
       if (item.levelReqs.length > 0) {
         lines.push(`${indent(1)}level-req:`);
-        item.levelReqs.forEach(r => lines.push(`${indent(2)}${s.key}: ${r.value}`));
+        item.levelReqs.forEach(r => lines.push(`${indent(2)}${item.levelReqs}: ${r.value}`));
       }
       if (item.type === "pet") {
         if (item.petExpType) lines.push(`${indent(1)}pet-exp-type: ${item.petExpType}`);
